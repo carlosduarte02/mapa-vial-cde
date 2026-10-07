@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calles de Ciudad del Este</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--ink:#22262b;--muted:#69707a;--paper:#fbfaf7;--line:#e2dfd7}
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+  #map{position:absolute;inset:0}
+  #panel{position:absolute;z-index:1000;top:12px;right:12px;width:290px;max-height:calc(100% - 24px);overflow:auto;
+    background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 14px 12px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  h1{font-size:17px;margin:0 0 2px;font-weight:700}
+  .sub{font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.4}
+  .row{display:grid;grid-template-columns:auto 34px 1fr auto;gap:8px;align-items:center;padding:5px 0;font-size:13.5px;cursor:pointer}
+  .row .km{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;text-align:right}
+  .sw{height:0;border-top:4px solid}
+  .sw.bad{border-top-style:dashed}
+  .opt{display:flex;gap:8px;align-items:center;font-size:13px;padding:8px 0 4px;border-top:1px solid var(--line);margin-top:6px;cursor:pointer}
+  #status{font-size:13px;line-height:1.4;margin:6px 0}
+  #status.err{color:#a8321f}
+  button{font:inherit;font-size:13px;padding:5px 10px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;cursor:pointer;margin-top:4px}
+  button:focus-visible,input:focus-visible{outline:2px solid #3b78b5;outline-offset:2px}
+  .note{font-size:12px;color:var(--muted);line-height:1.45;margin:8px 0 0}
+  .note a,.pop a{color:#2a62a0}
+  .pop{font-size:13px;line-height:1.5}
+  @media (max-width:640px){
+    #panel{top:auto;right:8px;left:8px;bottom:8px;width:auto;max-height:46%}
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<aside id="panel">
+  <h1>Calles de Ciudad del Este</h1>
+  <p class="sub">Tipo de superficie de cada calle. Las líneas rayadas son calles en mal estado.</p>
+  <div id="status">Cargando calles desde OpenStreetMap…</div>
+  <div id="legend"></div>
+  <label class="opt"><input type="checkbox" id="onlyBad"> Mostrar solo calles en mal estado</label>
+  <p class="note" id="note"></p>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const CATS = {
+  tierra:    {n:'Tierra',    c:'#c8432b'},
+  empedrado: {n:'Empedrado', c:'#e08a1e'},
+  adoquin:   {n:'Adoquín',   c:'#d4b106'},
+  asfalto:   {n:'Asfalto',   c:'#2f8f5b'},
+  hormigon:  {n:'Hormigón',  c:'#3b78b5'},
+  sin:       {n:'Sin datos', c:'#8a8f98'}
+};
+// valor de surface en OSM -> categoría
+const SURF = {
+  unpaved:'tierra',dirt:'tierra',ground:'tierra',earth:'tierra',sand:'tierra',gravel:'tierra',fine_gravel:'tierra',compacted:'tierra',grass:'tierra',mud:'tierra',
+  cobblestone:'empedrado',unhewn_cobblestone:'empedrado','cobblestone:flattened':'empedrado',
+  paving_stones:'adoquin',sett:'adoquin',
+  asphalt:'asfalto',
+  concrete:'hormigon','concrete:plates':'hormigon','concrete:lanes':'hormigon'
+};
+const BAD = {bad:'Malo',very_bad:'Muy malo',horrible:'Pésimo',very_horrible:'Pésimo',impassable:'Intransitable'};
+const GOOD = {excellent:'Excelente',good:'Bueno',intermediate:'Regular'};
+
+const BBOX = '-25.58,-54.72,-25.44,-54.55';
+const QUERY = `[out:json][timeout:90];way["highway"~"^(trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|track|primary_link|secondary_link|tertiary_link)$"](${BBOX});out tags geom;`;
+const ENDPOINTS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+
+const map = L.map('map',{preferCanvas:true}).setView([-25.5097,-54.6111],13);
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const gris = L.layerGroup([
+  L.tileLayer(ESRI+'Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:16,maxZoom:19,attribution:'Tiles &copy; Esri'}),
+  L.tileLayer(ESRI+'Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:16,maxZoom:19})
+]).addTo(map);
+const satelite = L.tileLayer(ESRI+'World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'});
+L.control.layers({'Mapa claro':gris,'Satélite':satelite,'OpenStreetMap (solo al publicar en línea)':osm},null,{position:'topleft'}).addTo(map);
+const group = L.layerGroup().addTo(map);
+
+let ways = [];
+const on = {tierra:true,empedrado:true,adoquin:true,asfalto:true,hormigon:true,sin:true};
+const $ = id => document.getElementById(id);
+
+function lengthKm(pts){
+  let m = 0;
+  for(let i=1;i<pts.length;i++) m += map.distance(pts[i-1],pts[i]);
+  return m/1000;
+}
+
+function parse(data){
+  ways = data.elements.filter(e=>e.geometry).map(e=>{
+    const t = e.tags||{};
+    const raw = (t.surface||'').split(';')[0].trim();
+    const cat = SURF[raw]||'sin';
+    const pts = e.geometry.map(p=>[p.lat,p.lon]);
+    return {id:e.id,t,raw,cat,bad:!!BAD[t.smoothness],pts,km:lengthKm(pts)};
+  });
+}
+
+function popup(w){
+  const est = BAD[w.t.smoothness]||GOOD[w.t.smoothness]||'Sin dato';
+  return `<div class="pop"><b>${w.t.name||'Calle sin nombre'}</b><br>
+    Superficie: ${CATS[w.cat].n}${w.raw&&w.cat==='sin'?' ('+w.raw+')':''}<br>
+    Estado: ${est}<br>
+    <a href="https://www.openstreetmap.org/edit?way=${w.id}" target="_blank" rel="noopener">Completar o corregir en OpenStreetMap</a></div>`;
+}
+
+function render(){
+  group.clearLayers();
+  const onlyBad = $('onlyBad').checked;
+  for(const w of ways){
+    if(!on[w.cat] || (onlyBad && !w.bad)) continue;
+    const major = /^(trunk|primary|secondary)/.test(w.t.highway);
+    L.polyline(w.pts,{
+      color:CATS[w.cat].c, weight:major?5:3.5, opacity:.9,
+      dashArray:w.bad?'9 6':null
+    }).bindPopup(popup(w)).addTo(group);
+  }
+}
+
+function legend(){
+  const tot = {}; let all = 0;
+  for(const k in CATS) tot[k]=0;
+  ways.forEach(w=>{tot[w.cat]+=w.km; all+=w.km;});
+  const badKm = ways.filter(w=>w.bad).reduce((s,w)=>s+w.km,0);
+  $('legend').innerHTML = Object.keys(CATS).map(k=>`
+    <label class="row"><input type="checkbox" data-k="${k}" checked>
+      <span class="sw" style="border-color:${CATS[k].c}"></span>
+      <span>${CATS[k].n}</span>
+      <span class="km">${tot[k].toFixed(0)} km · ${(all?tot[k]/all*100:0).toFixed(0)}%</span></label>`).join('');
+  document.querySelectorAll('#legend input').forEach(i=>i.onchange=()=>{on[i.dataset.k]=i.checked;render();});
+  const sinPct = all?tot.sin/all*100:0;
+  $('status').textContent = `${ways.length.toLocaleString('es')} calles · ${all.toFixed(0)} km · ${badKm.toFixed(0)} km marcados en mal estado.`;
+  $('note').innerHTML = sinPct>40
+    ? `Todavía el ${sinPct.toFixed(0)}% de las calles no tiene datos. Podés completarlos con <a href="https://streetcomplete.app" target="_blank" rel="noopener">StreetComplete</a> o tocando una calle y eligiendo "Completar o corregir".`
+    : `Datos de OpenStreetMap. Tocá una calle para ver el detalle y corregirla.`;
+}
+
+async function load(){
+  $('status').className=''; $('status').textContent='Cargando calles desde OpenStreetMap…';
+  for(const url of ENDPOINTS){
+    try{
+      const r = await fetch(url,{method:'POST',body:'data='+encodeURIComponent(QUERY)});
+      if(!r.ok) throw new Error(r.status);
+      parse(await r.json()); legend(); render(); return;
+    }catch(e){ /* prueba el siguiente servidor */ }
+  }
+  $('status').className='err';
+  $('status').innerHTML='No se pudieron cargar los datos. Revisá tu conexión.<br><button id="retry">Reintentar</button>';
+  $('retry').onclick=load;
+}
+$('onlyBad').onchange=render;
+load();
+</script>
+</body>
+</html>
