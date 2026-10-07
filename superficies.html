@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>¿De qué son las calles de CDE?</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div id="map"></div>
+<aside id="panel">
+  <a class="volver" href="./">← Inicio</a>
+  <h1>¿De qué son las calles de CDE?</h1>
+  <p class="sub">El color indica el material. Línea rayada = calle en mal estado.</p>
+  <div id="status">Cargando calles…</div>
+  <div id="legend"></div>
+  <label class="opt"><input type="checkbox" id="onlyBad"> Solo calles en mal estado</label>
+  <p class="note" id="note"></p>
+</aside>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="comun.js"></script>
+<script>
+const CATS = {
+  tierra:    {n:'Tierra',    c:'#c8432b'},
+  empedrado: {n:'Empedrado', c:'#e08a1e'},
+  adoquin:   {n:'Adoquín',   c:'#d4b106'},
+  asfalto:   {n:'Asfalto',   c:'#2f8f5b'},
+  hormigon:  {n:'Hormigón',  c:'#3b78b5'},
+  pav:       {n:'Pavimentado, tipo sin dato', c:'#8e63b8'},
+  sin:       {n:'Sin datos', c:'#8a8f98'}
+};
+const SURF = {
+  unpaved:'tierra',dirt:'tierra',ground:'tierra',earth:'tierra',sand:'tierra',gravel:'tierra',fine_gravel:'tierra',compacted:'tierra',grass:'tierra',mud:'tierra',
+  cobblestone:'empedrado',unhewn_cobblestone:'empedrado','cobblestone:flattened':'empedrado',
+  paving_stones:'adoquin',sett:'adoquin',
+  asphalt:'asfalto',
+  concrete:'hormigon','concrete:plates':'hormigon','concrete:lanes':'hormigon',
+  paved:'pav'
+};
+const BAD = {bad:'Malo',very_bad:'Muy malo',horrible:'Pésimo',very_horrible:'Pésimo',impassable:'Intransitable'};
+const GOOD = {excellent:'Excelente',good:'Bueno',intermediate:'Regular'};
+
+const map = crearMapa(), grupo = L.layerGroup().addTo(map);
+const on = {}; Object.keys(CATS).forEach(k=>on[k]=true);
+let calles = [], fecha = '';
+
+const popup = w => `<div class="pop"><b>${w.name||'Calle sin nombre'}</b><br>
+  Superficie: ${CATS[w.cat].n}${w.surf&&w.cat==='sin'?' ('+w.surf+')':''}<br>
+  Estado: ${BAD[w.smooth]||GOOD[w.smooth]||'Sin dato'}<br>
+  Última edición en OSM: ${fechaES(w.ts)}<br>
+  <a href="https://www.openstreetmap.org/edit?way=${w.id}" target="_blank" rel="noopener">Completar o corregir en OpenStreetMap</a></div>`;
+
+function render(){
+  grupo.clearLayers();
+  const soloMalas = $('onlyBad').checked;
+  for(const w of calles){
+    if(!on[w.cat] || (soloMalas && !w.bad)) continue;
+    const grande = /^(trunk|primary|secondary)/.test(w.hw);
+    L.polyline(w.pts,{color:CATS[w.cat].c,weight:grande?5:3.5,opacity:.9,dashArray:w.bad?'9 6':null})
+      .bindPopup(()=>popup(w)).addTo(grupo);
+  }
+}
+
+function leyenda(){
+  const tot = {}; let all = 0;
+  Object.keys(CATS).forEach(k=>tot[k]=0);
+  calles.forEach(w=>{tot[w.cat]+=w.km; all+=w.km;});
+  const malas = calles.filter(w=>w.bad).reduce((s,w)=>s+w.km,0);
+  $('legend').innerHTML = Object.keys(CATS).map(k=>`
+    <label class="row"><input type="checkbox" data-k="${k}" checked>
+      <span class="sw" style="border-color:${CATS[k].c}"></span><span>${CATS[k].n}</span>
+      <span class="km">${tot[k].toFixed(0)} km · ${(all?tot[k]/all*100:0).toFixed(0)}%</span></label>`).join('');
+  document.querySelectorAll('#legend input').forEach(i=>i.onchange=()=>{on[i.dataset.k]=i.checked;render();});
+  $('status').textContent = `${all.toFixed(0)} km de calles · ${malas.toFixed(0)} km en mal estado. Datos al ${fechaES(fecha)}.`;
+  const sinPct = all?tot.sin/all*100:0;
+  $('note').innerHTML = sinPct>30
+    ? `Al ${sinPct.toFixed(0)}% de las calles todavía le falta el dato. Tocá una calle y elegí "Completar o corregir", o usá <a href="https://streetcomplete.app" target="_blank" rel="noopener">StreetComplete</a>.`
+    : 'Tocá una calle para ver el detalle y corregirla.';
+}
+
+$('onlyBad').onchange = render;
+cargarCalles().then(d=>{
+  fecha = d.fecha;
+  calles = d.calles.map(w=>(w.cat=SURF[w.surf]||'sin', w.bad=!!BAD[w.smooth], w));
+  leyenda(); render();
+}).catch(errorCarga);
+</script>
+</body>
+</html>

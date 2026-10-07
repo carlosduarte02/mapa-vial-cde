@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mapa vial de Ciudad del Este</title>
+<style>
+  :root{--ink:#22262b;--muted:#69707a;--paper:#fbfaf7;--line:#e2dfd7}
+  body{margin:0;min-height:100vh;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:40px 16px}
+  main{max-width:720px;width:100%}
+  h1{font-size:clamp(26px,5vw,38px);margin:0 0 8px;line-height:1.15}
+  .lead{color:var(--muted);font-size:17px;line-height:1.5;margin:0 0 28px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+  a.card{display:block;border:1px solid var(--line);border-radius:12px;padding:20px;text-decoration:none;color:inherit;background:#fff;transition:border-color .15s,transform .15s}
+  a.card:hover{border-color:var(--ink);transform:translateY(-2px)}
+  a.card:focus-visible{outline:3px solid #3b78b5;outline-offset:2px}
+  .bars{display:flex;gap:4px;margin-bottom:14px}
+  .bars i{flex:1;height:6px;border-radius:3px}
+  h2{font-size:19px;margin:0 0 6px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.45}
+  .ayuda{margin-top:32px;font-size:14.5px;color:var(--muted);line-height:1.55;border-top:1px solid var(--line);padding-top:18px}
+  .ayuda a{color:#2a62a0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Mapa vial de Ciudad del Este</h1>
+  <p class="lead">Mapas con datos abiertos de OpenStreetMap para conocer cómo son las calles de la ciudad. Elegí uno:</p>
+  <div class="cards">
+    <a class="card" href="superficies.html">
+      <div class="bars"><i style="background:#c8432b"></i><i style="background:#e08a1e"></i><i style="background:#d4b106"></i><i style="background:#2f8f5b"></i></div>
+      <h2>¿De qué son las calles?</h2>
+      <p>Tierra, empedrado, adoquín o asfalto, y cuáles están en mal estado.</p>
+    </a>
+    <a class="card" href="nombres.html">
+      <div class="bars"><i style="background:#9aa7b4"></i><i style="background:#9aa7b4"></i><i style="background:#d6342c"></i></div>
+      <h2>¿Qué calles tienen nombre?</h2>
+      <p>Cuáles calles ya tienen nombre cargado y cuáles todavía no.</p>
+    </a>
+  </div>
+  <p class="ayuda">Estos mapas muestran lo que la gente cargó en OpenStreetMap, así que faltan datos. Para completarlos, tocá una calle en cualquiera de los mapas y elegí editarla en <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>, o usá la app <a href="https://streetcomplete.app" target="_blank" rel="noopener">StreetComplete</a> mientras caminás.</p>
+</main>
+</body>
+</html>

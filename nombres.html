@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>¿Qué calles de CDE tienen nombre?</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div id="map"></div>
+<aside id="panel">
+  <a class="volver" href="./">← Inicio</a>
+  <h1>¿Qué calles tienen nombre?</h1>
+  <p class="sub">En rojo, las calles que todavía no tienen nombre cargado. No se cuentan pasajes internos ni caminos de servicio.</p>
+  <div id="status">Cargando calles…</div>
+  <div id="legend"></div>
+  <p class="note" id="note"></p>
+</aside>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="comun.js"></script>
+<script>
+const CATS = {
+  con: {n:'Con nombre', c:'#9aa7b4'},
+  sin: {n:'Sin nombre', c:'#d6342c'}
+};
+const map = crearMapa(), grupo = L.layerGroup().addTo(map);
+const on = {con:true,sin:true};
+let calles = [], fecha = '';
+
+const popup = w => `<div class="pop"><b>${w.name||'Calle sin nombre'}</b><br>
+  ${w.name?'':'Si sabés cómo se llama, agregalo en OpenStreetMap.<br>'}
+  Última edición en OSM: ${fechaES(w.ts)}<br>
+  <a href="https://www.openstreetmap.org/edit?way=${w.id}" target="_blank" rel="noopener">${w.name?'Corregir':'Agregar el nombre'} en OpenStreetMap</a></div>`;
+
+function render(){
+  grupo.clearLayers();
+  for(const k of ['con','sin']){           // "sin nombre" se dibuja arriba
+    if(!on[k]) continue;
+    for(const w of calles){
+      if(w.cat!==k) continue;
+      L.polyline(w.pts,{color:CATS[k].c,weight:k==='sin'?4:3,opacity:k==='sin'?.95:.8})
+        .bindPopup(()=>popup(w)).addTo(grupo);
+    }
+  }
+}
+
+function leyenda(){
+  const km = {con:0,sin:0}, n = {con:0,sin:0};
+  calles.forEach(w=>{km[w.cat]+=w.km; n[w.cat]++;});
+  const all = km.con+km.sin;
+  $('legend').innerHTML = Object.keys(CATS).map(k=>`
+    <label class="row"><input type="checkbox" data-k="${k}" checked>
+      <span class="sw" style="border-color:${CATS[k].c}"></span><span>${CATS[k].n}</span>
+      <span class="km">${km[k].toFixed(0)} km · ${(all?km[k]/all*100:0).toFixed(0)}%</span></label>`).join('');
+  document.querySelectorAll('#legend input').forEach(i=>i.onchange=()=>{on[i.dataset.k]=i.checked;render();});
+  $('status').textContent = `${all.toFixed(0)} km de calles. Datos al ${fechaES(fecha)}.`;
+  $('note').textContent = `Faltan nombres en ${n.sin.toLocaleString('es')} tramos de calle. Tocá uno para agregarlo en OpenStreetMap.`;
+}
+
+cargarCalles().then(d=>{
+  fecha = d.fecha;
+  calles = d.calles.filter(w=>!/^(service|track)$/.test(w.hw)).map(w=>(w.cat=w.name?'con':'sin', w));
+  leyenda(); render();
+}).catch(errorCarga);
+</script>
+</body>
+</html>
