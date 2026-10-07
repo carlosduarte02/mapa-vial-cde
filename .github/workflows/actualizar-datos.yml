@@ -1,7 +1,7 @@
 name: Actualizar datos de calles
 on:
   schedule:
-    - cron: '0 6 * * 1'   # todos los lunes
+    - cron: '0 0 * * *'   # todos los días a la medianoche (UTC)
   workflow_dispatch:       # y a mano desde la pestaña Actions
 permissions:
   contents: write
